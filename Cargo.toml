@@ -1,0 +1,7 @@
+[package]
+name = "sponza-cmp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image_codecs = { git = "https://github.com/kirill146/image_codecs" }
