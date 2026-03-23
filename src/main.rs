@@ -32,6 +32,36 @@ fn eq_masks(img_a: &Image, img_b: &Image) -> bool {
     return true;
 }
 
+fn is_monochrome(img: &Image) -> bool {
+    for y in 0..img.h as usize {
+        for x in 0..img.w as usize {
+            let val = img.buf[(y * img.w as usize + x) * img.channels as usize + 0];
+            for c in 1..img.channels as usize {
+                if img.buf[(y * img.w as usize + x) * img.channels as usize + c] != val {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+fn eq_normals(normal_map: &Image, bump_map: &Image) -> bool {
+    assert_eq!(normal_map.w, bump_map.w);
+    assert_eq!(normal_map.h, bump_map.h);
+
+    assert_eq!(normal_map.depth, 8);
+    assert_eq!(bump_map.depth, 8);
+
+    assert_eq!(normal_map.channels, 3);
+
+    assert!(is_monochrome(bump_map));
+
+    // TODO: https://web.archive.org/web/20161222201234/http://cs.williams.edu/~morgan/code/C++/normal2bump.cpp
+    true
+}
+
 fn compare_textures() -> io::Result<()> {
     let path_mcguire = Path::new("sponza-versions/morgan_mcguire/textures");
     let path_meinl =   Path::new("sponza-versions/frank_meinl/textures");
@@ -72,7 +102,11 @@ fn compare_textures() -> io::Result<()> {
         } else if tga.depth != png.depth {
             println!("Depths don't match: {} vs {} ({} vs {})", tga.depth, png.depth, tga_filename, png_filename);
         } else if is_ddn {
-            // println!("Can't compare normals"); // skip
+            if !eq_normals(&tga, &png) {
+                println!("Normals don't match ({} vs {})", tga_filename, png_filename);
+            } else {
+                println!("Normals comparison: ok");
+            }
         } else if tga.channels != png.channels {
             if !eq_masks(&tga, &png) {
                 println!("Masks aren't the same ({} channels vs {} channels): ({} vs {})", tga.channels, png.channels, tga_filename, png_filename);
