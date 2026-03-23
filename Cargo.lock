@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "image_codecs"
 version = "0.1.0"
-source = "git+https://github.com/kirill146/image_codecs#18263b7af2809075cc334e95e01620abb52ec664"
+source = "git+https://github.com/kirill146/image_codecs#8092e65a6db40dc4aa965c29005fce60eb7f581c"
 
 [[package]]
 name = "sponza-cmp"
