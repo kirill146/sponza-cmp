@@ -58,7 +58,64 @@ fn eq_normals(normal_map: &Image, bump_map: &Image) -> bool {
 
     assert!(is_monochrome(bump_map));
 
-    // TODO: https://web.archive.org/web/20161222201234/http://cs.williams.edu/~morgan/code/C++/normal2bump.cpp
+    // reference implementations:
+    // https://web.archive.org/web/20161222201234/http://cs.williams.edu/~morgan/code/C++/normal2bump.cpp
+    // https://github.com/morgan3d/misc/blob/master/normal2bump/normal2bump.cpp
+
+    let w = normal_map.w as usize;
+    let h = normal_map.h as usize;
+
+    // compute laplacian
+    let mut laplacian = vec![0f32; w * h];
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let ddx = normal_map.buf[(y * w + (x + 1) % w) as usize * 3 + 0] as f32 * (1f32 / 255f32) - normal_map.buf[(y * w + (x + w - 1) % w) as usize * 3 + 0] as f32 * (1f32 / 255f32);
+            let ddy = normal_map.buf[((y + 1) % h * w + x) as usize * 3 + 1] as f32 * (1f32 / 255f32) - normal_map.buf[((y + h - 1) % h * w + x) as usize * 3 + 1] as f32 * (1f32 / 255f32);
+            laplacian[y * w + x] = (ddx + ddy) / 2f32;
+        }
+    }
+
+    // ping-pong
+    let mut src = vec![0f32; w * h];
+    let mut dst = vec![0.5f32; w * h];
+    const N: u32 = 100;
+    for _ in 0..N {
+        std::mem::swap(&mut src, &mut dst);
+        for y in 0..h {
+            for x in 0..w {
+                dst[y * w + x] = (src[y * w + (x + w - 1) % w] + src[(y + h - 1) % h * w + x]
+                                + src[y * w + (x + 1) % w] + src[(y + 1) % h * w + x]
+                                + laplacian[y * w + x]) * 0.25f32;
+            }
+        }
+    }
+
+    // normalize
+    let lo = *dst.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    let hi = *dst.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    for col in &mut dst {
+        *col = (*col - lo) / (hi - lo);
+    }
+
+    // convert to u8
+    let mut bump = vec![0u8; w * h];
+    for i in 0..dst.len() {
+        bump[i] = (dst[i] * 255f32 + 0.5f32) as u8;
+    }
+
+    // compare with the reference
+    const THRESHOLD: i32 = 1;
+    for y in 0..h {
+        for x in 0..w {
+            let val = bump_map.buf[(y * w + x) * bump_map.channels as usize + 0] as i32;
+            let diff = (bump[y * w + x] as i32 - val).abs();
+            if diff > THRESHOLD {
+                println!("x: {x} y: {y} diff: {diff}");
+                return false;
+            }
+        }
+    }
+
     true
 }
 
@@ -92,9 +149,9 @@ fn compare_textures() -> io::Result<()> {
         let png_raw = fs::read(&path).unwrap();
         let tga_raw = fs::read(&tga_file).unwrap();
 
-        println!("Decoding {}", png_filename);
+        // println!("Decoding {}", png_filename);
         let png = Image::new(&png_raw).unwrap();
-        println!("Decoding {}", tga_filename);
+        // println!("Decoding {}", tga_filename);
         let tga = Image::new(&tga_raw).unwrap();
 
         if tga.w != png.w || tga.h != png.h {
@@ -105,13 +162,13 @@ fn compare_textures() -> io::Result<()> {
             if !eq_normals(&tga, &png) {
                 println!("Normals don't match ({} vs {})", tga_filename, png_filename);
             } else {
-                println!("Normals comparison: ok");
+                // println!("Normals comparison: ok ({} vs {})", tga_filename, png_filename);
             }
         } else if tga.channels != png.channels {
             if !eq_masks(&tga, &png) {
-                println!("Masks aren't the same ({} channels vs {} channels): ({} vs {})", tga.channels, png.channels, tga_filename, png_filename);
+                println!("Masks aren't the same: ({}c {} vs {}c {})", tga.channels, tga_filename, png.channels, png_filename);
             } else {
-                println!("Mask comparison: ok");
+                // println!("Mask comparison: ok ({} vs {})", tga_filename, png_filename);
             }
         } else if tga.channels != png.channels {
             println!("Number of channels don't match: {} vs {} ({} vs {})", tga.channels, png.channels, tga_filename, png_filename);
